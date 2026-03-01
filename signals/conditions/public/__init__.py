@@ -1,0 +1,1 @@
+"""Public signal conditions."""
