@@ -3,6 +3,8 @@
 REST API 기반 자동매매 프로젝트입니다.
 핵심은 `signal condition` 들을 여러 노드로 구성된 체인으로 조합해, 브로커/시장에 맞게 동일한 실행 엔진을 재사용하는 구조입니다.
 
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-cyberflower-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/cyberflower)
+
 ## What You Can Do
 
 - REST API 브로커(키움/한투) 기반 실시간 매매 실행
