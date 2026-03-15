@@ -6,13 +6,10 @@ from core.infra.hantoo_rest import KoreaInvestment
 from core.infra.hantoo_record_rest import HantooRecordRestAPI, RECORDING_ENABLED
 from core.infra.util import find_project_root
 from core.infra.trading_profile import load_trading_profile
-import time
 import datetime
 import pytz
 import pprint
 from pathlib import Path
-
-SLEEP_TIME_SEC = 0.5
 
 
 class HantooWrapper(InvestmentWrapper):
@@ -82,8 +79,6 @@ class HantooWrapper(InvestmentWrapper):
             if tick in (StockTick.DAY, StockTick.WEEK):
                 self._normalize_after_close_prices(symbol, tick, latest_dt)
 
-        time.sleep(SLEEP_TIME_SEC)  # Avoid rate limit issues
-
         if len(self.stock_db.price_db[symbol][tick]) == 0:
             LogWriter().write_log(
                 "Hantoo API ERROR OCCURS! No data for {} {}".format(
@@ -126,8 +121,6 @@ class HantooWrapper(InvestmentWrapper):
             ohlcv = self.broker.fetch_domestic_usa_price(
                 symbol, self.stock_db.name_table[symbol]
             )
-
-            time.sleep(SLEEP_TIME_SEC)  # Avoid rate limit issues
 
             tryApiReadable = True
             recvdCode = None
@@ -190,7 +183,6 @@ class HantooWrapper(InvestmentWrapper):
         if self.mock:
             return 0.0
         resp = self.broker.get_oversea_available_cash()
-        time.sleep(SLEEP_TIME_SEC)
         if resp["rt_cd"] != "0":
             LogWriter().write_log(
                 "Hantoo get_available_cash failed. {}".format(resp["rt_cd"]),
@@ -223,7 +215,6 @@ class HantooWrapper(InvestmentWrapper):
             quantity=quantity,
             order_type="00",
         )
-        time.sleep(SLEEP_TIME_SEC)  # Avoid rate limit issues
         if resp["rt_cd"] != "0":
             LogWriter().write_log(
                 "{} : Hantoo buy_stock_by_market_price failed. {}".format(
@@ -289,7 +280,6 @@ class HantooWrapper(InvestmentWrapper):
             quantity=quantity,
             order_type="00",
         )
-        time.sleep(SLEEP_TIME_SEC)  # Avoid rate limit issues
         if resp["rt_cd"] != "0":
             LogWriter().write_log(
                 "{} : Hantoo sell_stock_by_market_price failed. {}".format(

@@ -5,6 +5,9 @@ import requests
 import pytz
 
 EXCHANGE_ORDER_CODE = {"NAS": "NASD", "NYS": "NYSE", "AMS": "AMEX"}
+MIN_SLEEP_TIME = 0.05  # seconds
+MAX_SLEEP_TIME = 0.5  # seconds
+DEFAULT_RETRY_COUNT = 5
 
 
 class KoreaInvestment:
@@ -18,6 +21,7 @@ class KoreaInvestment:
         nyt = pytz.timezone("America/New_York")
         self.today = datetime.datetime.now(nyt).strftime("%Y%m%d")
         self.access_token = None
+        self.sleep_time = MIN_SLEEP_TIME
         self.base_url = (
             "https://openapi.koreainvestment.com:9443"
             if not mock
@@ -25,23 +29,80 @@ class KoreaInvestment:
         )
         self.issue_access_token()
 
+    def _sleep_with_backoff(self, success: bool):
+        if success:
+            self.sleep_time = max(MIN_SLEEP_TIME, self.sleep_time / 2 - 0.01)
+        else:
+            self.sleep_time = min(MAX_SLEEP_TIME, self.sleep_time * 2 + 0.05)
+        time.sleep(self.sleep_time)
+
+    def _is_success_payload(self, payload):
+        if not isinstance(payload, dict):
+            return True
+        rt_cd = payload.get("rt_cd")
+        if rt_cd is None:
+            return True
+        return rt_cd == "0"
+
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        headers: dict,
+        *,
+        params=None,
+        data=None,
+        retry_count: int = DEFAULT_RETRY_COUNT,
+        validate_payload=None,
+    ):
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        last_error = None
+
+        for _ in range(retry_count):
+            try:
+                response = requests.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    data=data,
+                )
+                if response.status_code == 200:
+                    payload = response.json()
+                    success = self._is_success_payload(payload)
+                    if validate_payload is not None:
+                        success = success and validate_payload(payload)
+                    if success:
+                        self._sleep_with_backoff(True)
+                        return payload
+                    last_error = payload
+                else:
+                    last_error = response.text
+            except (requests.RequestException, ValueError) as exc:
+                last_error = str(exc)
+
+            self._sleep_with_backoff(False)
+
+        raise Exception(
+            "Hantoo request failed: method={} path={} error={}".format(
+                method, path, last_error
+            )
+        )
+
     def issue_access_token(self):
         path = "oauth2/tokenP"
-        url = f"{self.base_url}/{path}"
         headers = {"content-type": "application/json"}
         data = {
             "grant_type": "client_credentials",
             "appkey": self.api_key,
             "appsecret": self.api_secret,
         }
-        resp = requests.post(url, headers=headers, data=json.dumps(data))
-        resp_data = resp.json()
+        resp_data = self._request_json("POST", path, headers, data=json.dumps(data))
         self.access_token = f'Bearer {resp_data["access_token"]}'
 
     # 해외주식 주문가능금액(외화) 조회
     def get_oversea_available_cash(self):
         path = "uapi/overseas-stock/v1/trading/foreign-margin"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json",
             "authorization": self.access_token,
@@ -54,13 +115,11 @@ class KoreaInvestment:
             "CANO": self.acc_no_prefix,
             "ACNT_PRDT_CD": self.acc_no_postfix,
         }
-        resp = requests.get(url, headers=headers, params=params)
-        return resp.json()
+        return self._request_json("GET", path, headers, params=params)
 
     # 해외주식 분봉
     def fetch_usa_1m_ohlcv(self, symbol: str, excd: str, nmin: int):
         path = "/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json; charset=utf-8",
             "authorization": self.access_token,
@@ -80,8 +139,7 @@ class KoreaInvestment:
             "fill": "",
             "keyb": "",
         }
-        res = requests.get(url, headers=headers, params=params)
-        return res.json()
+        return self._request_json("GET", path, headers, params=params)
 
     # 해외주식 일/주/월봉
     def fetch_ohlcv_usa_overesea(
@@ -93,7 +151,6 @@ class KoreaInvestment:
         adj_price: bool = True,
     ):
         path = "/uapi/overseas-price/v1/quotations/dailyprice"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json",
             "authorization": self.access_token,
@@ -112,13 +169,11 @@ class KoreaInvestment:
             "BYMD": end_day,
             "MODP": 1 if adj_price else 0,
         }
-        res = requests.get(url, headers=headers, params=params)
-        return res.json()
+        return self._request_json("GET", path, headers, params=params)
 
     # 해외주식 현재가
     def fetch_domestic_usa_price(self, symbol: str, excd: str) -> dict:
         path = "uapi/overseas-price/v1/quotations/price"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json",
             "authorization": self.access_token,
@@ -127,12 +182,10 @@ class KoreaInvestment:
             "tr_id": "HHDFS00000300",
         }
         params = {"auth": "", "excd": excd, "symb": symbol}
-        resp = requests.get(url, headers=headers, params=params)
-        return resp.json()
+        return self._request_json("GET", path, headers, params=params)
 
     def get_basic_info(self, symbol: str, excd: str):
         path = "uapi/overseas-price/v1/quotations/price-detail"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json",
             "authorization": self.access_token,
@@ -141,9 +194,7 @@ class KoreaInvestment:
             "tr_id": "HHDFS76200200",
         }
         params = {"auth": "", "excd": excd, "symb": symbol}
-
-        resp = requests.get(url, headers=headers, params=params)
-        return resp.json()
+        return self._request_json("GET", path, headers, params=params)
 
     # 해외주식 주문
     def create_oversea_order(
@@ -160,7 +211,6 @@ class KoreaInvestment:
         else:
             tr_id = "VTTT1002U" if side == "buy" else "VTTT1006U"
         path = "uapi/overseas-stock/v1/trading/order"
-        url = f"{self.base_url}/{path}"
         excd = EXCHANGE_ORDER_CODE[exchange]
         ord_dvsn = "00"
         if tr_id == "TTTT1002U":
@@ -202,12 +252,10 @@ class KoreaInvestment:
             "tr_id": tr_id,
             "hashkey": hashkey,
         }
-        resp = requests.post(url, headers=headers, data=json.dumps(data))
-        return resp.json()
+        return self._request_json("POST", path, headers, data=json.dumps(data))
 
     def get_hoga(self, symbol: str, excd: str):
         path = "/uapi/overseas-price/v1/quotations/inquire-asking-price"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json",
             "authorization": self.access_token,
@@ -216,12 +264,10 @@ class KoreaInvestment:
             "tr_id": "HHDFS76200100",  # 모의투자 지원 안 함
         }
         params = {"auth": "", "excd": excd, "symb": symbol}
-        resp = requests.get(url, headers=headers, params=params)
-        return resp.json()
+        return self._request_json("GET", path, headers, params=params)
 
     def check_confirmed_order(self, day=""):
         path = "/uapi/overseas-stock/v1/trading/inquire-ccnl"
-        url = f"{self.base_url}/{path}"
         headers = {
             # "content-type": "application/json",
             "authorization": self.access_token,
@@ -245,25 +291,28 @@ class KoreaInvestment:
             "CTX_AREA_NK200": "",
             "CTX_AREA_FK200": "",
         }
-        resp = requests.get(url, headers=headers, params=params)
-        return resp.json()
+        return self._request_json("GET", path, headers, params=params)
 
     def issue_hashkey(self, data: dict):
         path = "uapi/hashkey"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json",
             "appKey": self.api_key,
             "appSecret": self.api_secret,
             "User-Agent": "Mozilla/5.0",
         }
-        resp = requests.post(url, headers=headers, data=json.dumps(data))
-        hashkey = resp.json()["HASH"]
+        resp = self._request_json(
+            "POST",
+            path,
+            headers,
+            data=json.dumps(data),
+            validate_payload=lambda payload: "HASH" in payload,
+        )
+        hashkey = resp["HASH"]
         return hashkey
 
     def get_account_balance(self):
         path = "uapi/overseas-stock/v1/trading/inquire-balance"
-        url = f"{self.base_url}/{path}"
         headers = {
             "content-type": "application/json",
             "authorization": self.access_token,
@@ -280,8 +329,7 @@ class KoreaInvestment:
             "CTX_AREA_FK200": "",
             "CTX_AREA_NK200": "",
         }
-        resp = requests.get(url, headers=headers, params=params)
-        return resp.json()
+        return self._request_json("GET", path, headers, params=params)
 
 
 def basic_test(symbol, excd):
