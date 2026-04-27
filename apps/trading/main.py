@@ -154,12 +154,16 @@ def run_trading(
 
         if market_time.is_pre_market_open():
             for stock in stocks:
+                if not stock.ensure_initialized():
+                    continue
                 stock.update_by_minute(time.localtime().tm_min)
 
         if market_time.is_market_open():
             current_minute = market_time.get_minute()
 
             for stock in stocks:
+                if not stock.ensure_initialized():
+                    continue
                 stock.update_by_minute(current_minute)
                 stock.check_condition_and_buy()
                 stock.check_condition_and_sell()

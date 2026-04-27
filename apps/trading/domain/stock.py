@@ -10,6 +10,8 @@ class MovingAverageType(enumerate):
 
 
 class Stock:
+    MAX_INIT_ATTEMPTS = 10
+
     def __init__(
         self,
         symbol,
@@ -37,6 +39,9 @@ class Stock:
         self.min_sell_price = 0.0
         self.condition_factory = condition_factory or get_condition_factory("private_condition")
         self.strategy_runtime = None
+        self.is_initialized = False
+        self.init_attempts = 0
+        self.init_disabled = False
 
         # Initialize symbol-specific price data
         if self.symbol not in self.stock_db.price_db:
@@ -46,7 +51,8 @@ class Stock:
                 self.stock_db.order_table[self.symbol][stage] = 0
 
         self.isUpdateStart = [False for _ in range(StockTick.MONTH + 1)]
-        self._init_stock_info(buyTick, sellTick)
+        self.buy_tick = buyTick
+        self.sell_tick = sellTick
 
     def _init_stock_info(self, buy_tick, sell_tick):
         if (
@@ -55,22 +61,22 @@ class Stock:
             )
             == False
         ):
-            exit(0)
+            return False
 
         for tick in range(StockTick.HOUR + 1):
             if not self.stock_db.investCommunicator.get_last_prices(
                 self.symbol, tick, "주식분봉차트조회"
             ):
-                exit(0)
+                return False
 
         if not self.stock_db.investCommunicator.get_last_prices(
             self.symbol, StockTick.DAY, "주식일봉차트조회"
         ):
-            exit(0)
+            return False
         if not self.stock_db.investCommunicator.get_last_prices(
             self.symbol, StockTick.WEEK, "주식주봉차트조회"
         ):
-            exit(0)
+            return False
 
         LogWriter().write_log(
             "init() Symbol: {}, Name: {}".format(self.symbol, self.name), LogLevel.DEBUG
@@ -88,6 +94,35 @@ class Stock:
         )
         self.strategy_runtime = self.condition_factory.create(ctx)
         self.sync_order_quantities(buy_tick, sell_tick, self.initialBuy, self.initialSell)
+        return True
+
+    def ensure_initialized(self):
+        if self.is_initialized:
+            return True
+        if self.init_disabled:
+            return False
+
+        self.init_attempts += 1
+        if self._init_stock_info(self.buy_tick, self.sell_tick):
+            self.is_initialized = True
+            return True
+
+        if self.init_attempts >= self.MAX_INIT_ATTEMPTS:
+            self.init_disabled = True
+            LogWriter().write_log(
+                "Stock init failed after {} attempts. symbol={} name={} skipped".format(
+                    self.init_attempts, self.symbol, self.name
+                ),
+                LogLevel.ERROR,
+            )
+        else:
+            LogWriter().write_log(
+                "Stock init retry pending. symbol={} name={} attempt={}/{}".format(
+                    self.symbol, self.name, self.init_attempts, self.MAX_INIT_ATTEMPTS
+                ),
+                LogLevel.DEBUG,
+            )
+        return False
 
     def _init_min_sell_price(self):
         if self.avg_buy_price <= 0:
