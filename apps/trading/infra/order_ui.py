@@ -1,4 +1,5 @@
 import os
+import tomllib
 from core.infra import LogWriter, LogLevel
 from core.infra.trading_profile import load_trading_profile
 from core.domain import StockTick, StageType
@@ -6,10 +7,15 @@ from core.domain import StockTick, StageType
 import pandas as pd
 
 
+DEFAULT_CONDITION_PROFILE = "private_condition"
+CONDITION_PROFILE_FILE_NAME = "condition_profiles.toml"
+
+
 class OrderIOManager:
     def __init__(self, invest_company, account_type):
         self.invest_company = invest_company
         self.account_type = account_type
+        self.condition_profiles = {}
         try:
             profile = load_trading_profile(invest_company, account_type)
             if profile.order_file is None:
@@ -17,10 +23,58 @@ class OrderIOManager:
                     "order_file is required for trading runtime profiles"
                 )
             self.file_name = str(profile.order_file)
+            self.condition_profile_file = (
+                profile.order_file.parent / CONDITION_PROFILE_FILE_NAME
+            )
+            self.condition_profiles = self._load_condition_profiles()
             os.makedirs(os.path.dirname(self.file_name), exist_ok=True)
         except Exception as e:
             LogWriter().write_log(str(e), LogLevel.ERROR)
             exit(0)
+
+    def _load_condition_profiles(self):
+        if not self.condition_profile_file.exists():
+            return {}
+
+        with open(self.condition_profile_file, "rb") as f:
+            config = tomllib.load(f)
+
+        if not isinstance(config, dict):
+            return {}
+        return config
+
+    @staticmethod
+    def _normalize_profile(value):
+        if value is None:
+            return None
+        value = str(value).strip()
+        return value or None
+
+    def _profile_section_candidates(self):
+        account_key = str(self.account_type).strip()
+        broker_account_key = "{}_{}".format(
+            str(self.invest_company).strip(), account_key
+        )
+        return [broker_account_key, account_key]
+
+    def get_condition_profile(self, symbol):
+        symbol = str(symbol)
+
+        for section_name in self._profile_section_candidates():
+            section = self.condition_profiles.get(section_name)
+            if not isinstance(section, dict):
+                continue
+            symbols = section.get("symbols")
+            if not isinstance(symbols, dict):
+                continue
+            profile = self._normalize_profile(symbols.get(symbol))
+            if profile:
+                return profile
+
+        return (
+            self._normalize_profile(self.condition_profiles.get("default"))
+            or DEFAULT_CONDITION_PROFILE
+        )
 
     def update_account_balance(self, balances):
         try:

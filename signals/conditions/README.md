@@ -37,7 +37,7 @@ profile 해석 위치: `signals/conditions/factory/registry.py`
 1. `signals/conditions/public/`에 condition 클래스 추가
 2. `signals/conditions/public/factory.py`에 profile factory 추가
 3. `signals/conditions/factory/registry.py`에 profile 등록
-4. `QUANT_PROFILE=<new_profile>`로 실행 확인
+4. trading은 `order/<broker>/condition_profiles.toml`로 실행 확인
 
 권장 인터페이스:
 - `execute(...)`

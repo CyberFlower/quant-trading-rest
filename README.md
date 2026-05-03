@@ -8,14 +8,14 @@ REST API 기반 자동매매 프로젝트입니다.
 ## What You Can Do
 
 - REST API 브로커(키움/한투) 기반 실시간 매매 실행
-- 시그널 profile 전환 (`QUANT_PROFILE`)으로 전략 교체
+- 주문 디렉토리의 condition profile 설정으로 종목별 전략 교체
 - 공개 시그널을 추가해 커스텀 전략 확장
 
 ## 프로젝트 개관
 
 - 브로커: 키움(국장), 한국투자증권(미국장)
 - 실행 진입점: `apps/trading/main.py`
-- 전략 전환: `QUANT_PROFILE` 환경변수
+- 전략 전환: `order/<broker>/condition_profiles.toml`
 - 트레이딩 프로필 설정: `trading_profiles.toml`
 - 주문 입력: `trading_profiles.toml`에 매핑된 `order/<broker>/*.xlsx`
 - 인증키: `trading_profiles.toml`에 매핑된 `investment_key/*.key`
@@ -35,17 +35,19 @@ python3 -m pip install requests pytz pandas exchange_calendars matplotlib openpy
   - 준비 방법/포맷: `investment_key/README.md` 를 참고하세요.
 - 주문 시트(`order/<broker>/*.xlsx`)
   - 컬럼/틱/제약사항: `order/README.md` 를 참고하세요.
+- condition profile 설정(`order/<broker>/condition_profiles.toml`)
+  - 종목별 전략 매핑과 기본값은 `order/README.md` 를 참고하세요.
 - 프로필 매핑(`trading_profiles.toml`)
   - 어떤 실행 profile이 어떤 key/order 파일을 읽는지 여기서 결정합니다.
 
 실행 예시:
 
 ```bash
-QUANT_PROFILE=public_example python -m apps.trading.main kiwoom quant
-scripts/run_quant.sh kiwoom quant public_example
+python -m apps.trading.main kiwoom quant
+scripts/run_quant.sh kiwoom quant
 ```
 
-- `public_example`: 공개 저장소에 포함된 예시 전략 profile 이름입니다.
+- condition profile은 `order/<broker>/condition_profiles.toml`에서 종목별로 설정합니다.
 - `quant`: 현재 구현 기준 `trading_profiles.toml`에서 key/order 파일을 가리키는 실행 profile 이름입니다. (`test`는 보통 모의운용 profile로 사용)
 
 ## 운영 모델

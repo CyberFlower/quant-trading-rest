@@ -11,7 +11,7 @@ def get_condition_factory(profile: str):
         except Exception as exc:
             raise ValueError("private_condition profile is unavailable in this repository") from exc
         return PrivateMAConditionFactory()
-    if normalized in ("public_example", "example"):
+    if normalized in ("public_condition", "public_example", "example"):
         return PublicExampleFactory()
     if normalized in ("private_vwap", "public_vwap"):
         try:

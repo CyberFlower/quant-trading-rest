@@ -1,6 +1,7 @@
 # Order Sheet
 
 주문 파라미터는 `order/<broker>/*.xlsx`에서 읽습니다.
+종목별 condition profile은 같은 디렉토리의 `condition_profiles.toml`에서 읽습니다.
 
 ## 필수 컬럼 예시
 
@@ -68,6 +69,30 @@
 - RP 종목은 더 이상 Order Sheet에 반드시 포함할 필요가 없습니다.
 - RP 메타데이터는 `trading_profiles.toml`에서 관리하며, Order Sheet와는 독립적으로 동작합니다.
 - `trading_profiles.toml`에서 `rp_symbol`, `rp_name`을 비우거나 `None`/`null` 문자열로 두면 RP 기능을 사용하지 않습니다.
+
+## Condition Profile
+
+`condition_profiles.toml`은 주문 시트와 같은 브로커 디렉토리에 둡니다.
+파일이 없거나 종목별 설정이 없으면 `private_condition`을 사용합니다.
+
+예:
+
+```toml
+default = "private_condition"
+
+[kiwoom_isa.symbols]
+"005930" = "private_ma_short_cycle"
+
+[kiwoom_quant.symbols]
+"000660" = "private_ma_short_cycle"
+```
+
+조회 순서:
+
+- `<broker>_<account>.symbols.<symbol>`
+- `<account>.symbols.<symbol>`
+- `default`
+- `private_condition`
 
 브로커별 입력 기준:
 

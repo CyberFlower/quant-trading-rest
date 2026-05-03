@@ -10,7 +10,6 @@ from core.infra.market_time import KRXMarketTime, NasdaqMarketTime
 from signals.conditions.factory import get_condition_factory
 import time
 import sys
-import os
 
 
 def _initialize_rp_etf(invest_communicator, runtime_stock_database):
@@ -87,14 +86,7 @@ def run_trading(
 
     investCommunicator.connect(quant_mode)
     runtime_stock_database.bind(orderIO, investCommunicator)
-    condition_profile = os.getenv("QUANT_PROFILE", "private_condition")
-    try:
-        condition_factory = get_condition_factory(condition_profile)
-    except ValueError as exc:
-        exit(str(exc))
-    LogWriter().write_log(
-        "Condition profile: {}".format(condition_profile)
-    )
+    condition_factories = {}
 
     buy_prices = {}
     holding_quantities = {}
@@ -109,6 +101,14 @@ def run_trading(
     _initialize_rp_etf(investCommunicator, runtime_stock_database)
     stocks = []
     for symbol in interest_stocks.keys():
+        condition_profile = orderIO.get_condition_profile(symbol)
+        try:
+            condition_factory = condition_factories.get(condition_profile)
+            if condition_factory is None:
+                condition_factory = get_condition_factory(condition_profile)
+                condition_factories[condition_profile] = condition_factory
+        except ValueError as exc:
+            exit(str(exc))
         stocks.append(
             Stock(
                 symbol,
@@ -132,7 +132,11 @@ def run_trading(
                 condition_factory=condition_factory,
             )
         )
-        LogWriter().write_log("{} {} Added..".format(symbol, interest_stocks[symbol]))
+        LogWriter().write_log(
+            "{} {} Added.. condition_profile={}".format(
+                symbol, interest_stocks[symbol], condition_profile
+            )
+        )
 
     if align_to_minute:
         sleep_fn((60.0 - time.localtime().tm_sec) % 60.0)

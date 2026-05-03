@@ -1,0 +1,7 @@
+default = "public_condition"
+
+# [kiwoom_isa.symbols]
+# "005930" = "private_ma_short_cycle"
+#
+# [kiwoom_quant.symbols]
+# "000660" = "private_ma_short_cycle"

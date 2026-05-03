@@ -17,21 +17,24 @@ cd "$PROJECT_DIR" || exit 1
 ARG1="$1"
 ARG2="$2"
 if [ -z "$ARG1" ] || [ -z "$ARG2" ]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') usage: $0 <arg1> <arg2> [condition_profile] (e.g. kiwoom quant private_condition)" >&2
+    echo "$(date '+%Y-%m-%d %H:%M:%S') usage: $0 <arg1> <arg2> (e.g. kiwoom quant)" >&2
     exit 1
 fi
-CONDITION_PROFILE="${3:-${QUANT_PROFILE:-private_condition}}"
+if [ -n "$3" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') condition profile argument was removed; use order/<broker>/condition_profiles.toml" >&2
+    exit 1
+fi
 
 LOG_DIR="$PROJECT_DIR/output/log/trading"
 mkdir -p "$LOG_DIR"
 LOGFILE="$LOG_DIR/${ARG1}_${ARG2}.txt"
 
 restart_count=0
-echo "$(date '+%Y-%m-%d %H:%M:%S') run_quant.sh watchdog started (args: $ARG1 $ARG2, profile: $CONDITION_PROFILE)" > "$LOGFILE"
+echo "$(date '+%Y-%m-%d %H:%M:%S') run_quant.sh watchdog started (args: $ARG1 $ARG2)" > "$LOGFILE"
 
 while true; do
-    echo "$(date '+%Y-%m-%d %H:%M:%S') launching QUANT_PROFILE=$CONDITION_PROFILE $PYTHON_BIN -m $RUN_MODULE $ARG1 $ARG2 (attempt $((restart_count+1)))" >> "$LOGFILE"
-    QUANT_PROFILE="$CONDITION_PROFILE" "$PYTHON_BIN" -m "$RUN_MODULE" "$ARG1" "$ARG2" >> "$LOGFILE" 2>&1
+    echo "$(date '+%Y-%m-%d %H:%M:%S') launching $PYTHON_BIN -m $RUN_MODULE $ARG1 $ARG2 (attempt $((restart_count+1)))" >> "$LOGFILE"
+    "$PYTHON_BIN" -m "$RUN_MODULE" "$ARG1" "$ARG2" >> "$LOGFILE" 2>&1
     rc=$?
     echo "$(date '+%Y-%m-%d %H:%M:%S') process exited with code $rc" >> "$LOGFILE"
 
