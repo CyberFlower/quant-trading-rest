@@ -164,6 +164,9 @@ def run_trading(
 
         if market_time.is_market_open():
             current_minute = market_time.get_minute()
+            update_stock_infos = {}
+            if current_minute % 15 == 0:
+                update_stock_infos = orderIO.read_changed_stock_infos()
 
             for stock in stocks:
                 if not stock.ensure_initialized():
@@ -172,27 +175,22 @@ def run_trading(
                 stock.check_condition_and_buy()
                 stock.check_condition_and_sell()
 
-                update_stock_infos = {}
-                if current_minute % 15 == 0:
-                    update_stock_infos = orderIO.read_stock_infos()
-                    # TODO needs change logic in multi-thread, currently using 1 core
-                    for symbol in update_stock_infos.keys():
-                        if stock.symbol == symbol:
-                            stock.sync_order_quantities(
-                                update_stock_infos[symbol]["buyTick"],
-                                update_stock_infos[symbol]["sellTick"],
-                                [
-                                    update_stock_infos[symbol]["buy_1"],
-                                    update_stock_infos[symbol]["buy_2"],
-                                    update_stock_infos[symbol]["buy_3"],
-                                ],
-                                [
-                                    update_stock_infos[symbol]["sell_1"],
-                                    update_stock_infos[symbol]["sell_2"],
-                                    update_stock_infos[symbol]["sell_3"],
-                                ],
-                            )
-                            break
+                stock_info = update_stock_infos.get(stock.symbol)
+                if stock_info is not None:
+                    stock.sync_order_quantities(
+                        stock_info["buyTick"],
+                        stock_info["sellTick"],
+                        [
+                            stock_info["buy_1"],
+                            stock_info["buy_2"],
+                            stock_info["buy_3"],
+                        ],
+                        [
+                            stock_info["sell_1"],
+                            stock_info["sell_2"],
+                            stock_info["sell_3"],
+                        ],
+                    )
 
         current_time = time.time()
         sleep_fn(max(0, 60.0 - (current_time - start_time)))

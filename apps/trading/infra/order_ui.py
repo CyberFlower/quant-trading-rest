@@ -9,6 +9,16 @@ import pandas as pd
 
 DEFAULT_CONDITION_PROFILE = "private_condition"
 CONDITION_PROFILE_FILE_NAME = "condition_profiles.toml"
+ORDER_INPUT_FIELDS = (
+    "buy_1",
+    "buy_2",
+    "buy_3",
+    "sell_1",
+    "sell_2",
+    "sell_3",
+    "buyTick",
+    "sellTick",
+)
 
 
 class OrderIOManager:
@@ -16,6 +26,7 @@ class OrderIOManager:
         self.invest_company = invest_company
         self.account_type = account_type
         self.condition_profiles = {}
+        self._previous_order_inputs = None
         try:
             profile = load_trading_profile(invest_company, account_type)
             if profile.order_file is None:
@@ -103,6 +114,11 @@ class OrderIOManager:
         LogWriter().write_log("update account balance failed", LogLevel.ERROR)
         exit(0)
 
+    @staticmethod
+    def _order_input_values(stock_info):
+        # Keep only fields that trigger runtime quantity sync.
+        return tuple(stock_info[field] for field in ORDER_INPUT_FIELDS)
+
     def read_stock_infos(self):
         stock_orders = {}
         try:
@@ -125,9 +141,30 @@ class OrderIOManager:
             LogWriter().write_log(e.__str__(), LogLevel.ERROR)
             exit(0)
 
+        if self._previous_order_inputs is None:
+            # Seed the first 15-minute comparison snapshot.
+            self._previous_order_inputs = {
+                symbol: self._order_input_values(stock_info)
+                for symbol, stock_info in stock_orders.items()
+            }
         return stock_orders
 
-    # TODO Refactoring using list periodically. FILE IO spends a lot of time.
+    def read_changed_stock_infos(self):
+        # Compare with the previous snapshot, then advance it.
+        stock_infos = self.read_stock_infos()
+        current_order_inputs = {
+            symbol: self._order_input_values(stock_info)
+            for symbol, stock_info in stock_infos.items()
+        }
+        changed_stock_infos = {
+            symbol: stock_info
+            for symbol, stock_info in stock_infos.items()
+            if self._previous_order_inputs.get(symbol)
+            != current_order_inputs[symbol]
+        }
+        self._previous_order_inputs = current_order_inputs
+        return changed_stock_infos
+
     def edit_stock_info(self, symbol, tickType, subtractValue):
         try:
             df = pd.read_excel(self.file_name, dtype={"symbol": str})
